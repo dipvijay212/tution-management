@@ -75,6 +75,8 @@ export const AuthProvider = ({ children }) => {
     if (isInitialized.current) return;
     isInitialized.current = true;
 
+    let isSubscribed = true;
+
     const initAuth = async () => {
       try {
         console.log('[Auth] Initializing session...');
@@ -87,23 +89,28 @@ export const AuthProvider = ({ children }) => {
           throw sessionError;
         }
 
+        if (!isSubscribed) return;
+
         if (session?.user) {
           console.log('[Auth] Valid session found:', session.user.email);
           const profileData = await fetchProfile(session.user);
           
+          if (!isSubscribed) return;
+
           if (!profileData) {
             console.warn('[Auth] Authenticated but no profile record. Redirecting to login.');
             dispatch(clearAuth());
             router.replace('/login?error=profile_not_found');
           } else {
             dispatch(setAuth({ user: session.user, profile: profileData }));
-            handleRedirect(profileData, pathname);
+            handleRedirect(profileData, window.location.pathname);
           }
         } else {
           console.log('[Auth] No active session found.');
           dispatch(clearAuth());
         }
       } catch (err) {
+        if (!isSubscribed) return;
         console.error('[Auth] Initialization fatal error:', err);
         dispatch(setAuthError(err.message));
         dispatch(clearAuth());
@@ -118,14 +125,18 @@ export const AuthProvider = ({ children }) => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('[Auth] Event detected:', event);
+      if (!isSubscribed) return;
       
       try {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        // Handle token refresh or sign in or password recovery
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'PASSWORD_RECOVERY') {
           if (session?.user) {
             const profileData = await fetchProfile(session.user);
+            if (!isSubscribed) return;
+            
             if (profileData) {
               dispatch(setAuth({ user: session.user, profile: profileData }));
-              handleRedirect(profileData, pathname);
+              handleRedirect(profileData, window.location.pathname);
             } else {
               dispatch(clearAuth());
             }
@@ -137,22 +148,15 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (err) {
         console.error('[Auth] Error in onAuthStateChange handler:', err);
-      } finally {
-        dispatch(setLoading(false));
       }
     });
 
-    // Global safety timeout (5 seconds as requested)
-    const timeoutId = setTimeout(() => {
-      console.log('[Auth] Global safety timeout reached. Forcing loading to false.');
-      dispatch(setLoading(false));
-    }, 5000);
-
     return () => {
+      isSubscribed = false;
       subscription?.unsubscribe();
-      clearTimeout(timeoutId);
     };
-  }, [dispatch, fetchProfile, handleRedirect, mounted, pathname, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted]);
 
   // Initial initialization loading screen (with hydration protection)
   if (!mounted || (loading && !isAuthenticated)) {

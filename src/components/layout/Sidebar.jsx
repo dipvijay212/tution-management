@@ -15,7 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
-  LayoutGrid
+  LayoutGrid,
+  UserCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
@@ -32,6 +33,7 @@ const Sidebar = ({ role }) => {
       { name: 'Students', icon: GraduationCap, path: '/admin/students' },
       { name: 'Batches', icon: LayoutGrid, path: '/admin/batches' },
       { name: 'Attendance', icon: ClipboardCheck, path: '/admin/attendance' },
+      { name: 'Teacher Attendance', icon: UserCheck, path: '/admin/teacher-attendance' },
       { name: 'Fees', icon: IndianRupee, path: '/admin/fees' },
       { name: 'Exams', icon: BookOpen, path: '/admin/exams' },
       { name: 'Assignments', icon: Calendar, path: '/admin/assignments' },
