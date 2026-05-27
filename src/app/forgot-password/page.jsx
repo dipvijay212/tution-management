@@ -6,12 +6,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { supabase } from '@/lib/supabase/client';
 import Button from '@/components/ui/Button';
-import { Mail, ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react';
+import Input from '@/components/ui/Input';
+import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 
 const forgotPasswordSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
+  email: z.string()
+    .min(1, 'Email address is required')
+    .email('Please enter a valid email address'),
 });
 
 export default function ForgotPasswordPage() {
@@ -24,13 +27,22 @@ export default function ForgotPasswordPage() {
     formState: { errors },
   } = useForm({
     resolver: zodResolver(forgotPasswordSchema),
+    defaultValues: {
+      email: '',
+    }
   });
 
   const onSubmit = async (data) => {
     try {
       setLoading(true);
+      
+      // Ensure the redirect URL matches Supabase settings
+      const redirectToUrl = typeof window !== 'undefined'
+        ? `${window.location.origin}/reset-password`
+        : "http://localhost:3000/reset-password";
+        
       const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: redirectToUrl,
       });
 
       if (error) {
@@ -48,82 +60,71 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="flex min-h-[80vh] items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-3xl shadow-xl border border-gray-100 relative overflow-hidden">
+    <div className="flex min-h-[85vh] items-center justify-center px-4 py-12 sm:px-6 lg:px-8 bg-slate-50/50">
+      <div className="w-full max-w-md bg-white p-8 rounded-3xl premium-shadow border border-slate-100 relative overflow-hidden transition-all duration-300">
         
-        {/* Background Decorative blob */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50 rounded-full blur-3xl opacity-50 -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+        {/* Background Decorative Gradient Blobs */}
+        <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-100/50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-slate-100 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
 
         {!isSuccess ? (
-          <>
+          <div className="relative z-10 space-y-6">
             <div>
-              <Link href="/login" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-indigo-600 transition-colors mb-6">
-                <ArrowLeft size={16} className="mr-2" />
+              <Link 
+                href="/login" 
+                className="inline-flex items-center text-sm font-semibold text-slate-500 hover:text-indigo-600 transition-colors group mb-6"
+              >
+                <ArrowLeft size={16} className="mr-2 transform group-hover:-translate-x-1 transition-transform" />
                 Back to login
               </Link>
-              <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+              <h2 className="text-3xl font-black text-slate-900 tracking-tight">
                 Forgot Password
               </h2>
-              <p className="mt-2 text-sm text-gray-600">
-                Enter your email address and we'll send you a link to reset your password.
+              <p className="mt-2 text-sm text-slate-500 leading-relaxed">
+                Enter your registered email address below, and we will email you a secure link to reset your password.
               </p>
             </div>
 
-            <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                  Email Address
-                </label>
-                <div className="relative mt-1">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                    <Mail className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    id="email"
-                    type="email"
-                    autoComplete="email"
-                    {...register('email')}
-                    className={`block w-full rounded-xl border ${
-                      errors.email ? 'border-red-300 ring-red-100' : 'border-gray-200 focus:border-indigo-500 focus:ring-indigo-500'
-                    } bg-gray-50 py-2.5 pl-10 pr-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 sm:text-sm transition-all`}
-                    placeholder="name@example.com"
-                  />
-                </div>
-                {errors.email && (
-                  <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>
-                )}
-              </div>
+            <form className="space-y-5" onSubmit={handleSubmit(onSubmit)} noValidate>
+              <Input
+                id="email"
+                type="email"
+                label="Email Address"
+                error={errors.email?.message}
+                icon={Mail}
+                {...register('email')}
+                placeholder="name@example.com"
+                disabled={loading}
+                autoComplete="email"
+              />
 
               <Button
                 type="submit"
-                className="w-full py-3"
-                disabled={loading}
+                className="w-full py-3.5 mt-2"
+                isLoading={loading}
               >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending link...
-                  </>
-                ) : (
-                  'Send Reset Link'
-                )}
+                Send Reset Link
               </Button>
             </form>
-          </>
+          </div>
         ) : (
-          <div className="text-center py-8">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 mb-6">
-              <CheckCircle2 className="h-8 w-8 text-green-600" />
+          <div className="relative z-10 text-center py-6 space-y-6">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 premium-shadow">
+              <CheckCircle2 className="h-8 w-8" />
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-2">
-              Check your inbox
-            </h2>
-            <p className="text-sm text-gray-600 mb-8">
-              We have sent a password reset link to your email address. Please click the link to create a new password.
-            </p>
+            
+            <div className="space-y-2">
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                Check your inbox
+              </h2>
+              <p className="text-sm text-slate-500 leading-relaxed max-w-sm mx-auto">
+                Password reset link sent to your email. Click the link inside the email to securely choose a new password.
+              </p>
+            </div>
+            
             <Link 
               href="/login"
-              className="inline-flex w-full justify-center rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-indigo-600 transition-colors"
+              className="inline-flex w-full justify-center items-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
             >
               Back to login
             </Link>
@@ -133,3 +134,4 @@ export default function ForgotPasswordPage() {
     </div>
   );
 }
+

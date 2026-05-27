@@ -23,7 +23,7 @@ const StudentTable = ({ students = [], onDelete, isLoading }) => {
           <Button variant="secondary" size="sm" className="flex-1 sm:flex-none gap-2">
             <Filter size={16} /> Filter
           </Button>
-          <Link href="/admin/students/add" className="flex-1 sm:flex-none">
+          <Link href="/admin/students/create" className="flex-1 sm:flex-none">
             <Button size="sm" className="w-full">Add Student</Button>
           </Link>
         </div>

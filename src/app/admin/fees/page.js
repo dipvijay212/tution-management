@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import FeeTable from '@/features/fees/components/FeeTable';
-import { supabaseHelpers } from '@/lib/supabase/client';
 import { 
   IndianRupee, 
   ArrowUpRight, 
@@ -15,33 +14,105 @@ import {
 import Button from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/utils';
 import Link from 'next/link';
+import { feesService } from '@/services/fees.service';
+import toast from 'react-hot-toast';
 
 export default function FeesOverviewPage() {
   const [records, setRecords] = useState([]);
+  const [filteredRecords, setFilteredRecords] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterMonth, setFilterMonth] = useState('All');
+
+  const fetchFees = async () => {
+    try {
+      setLoading(true);
+      console.log('[Fees Overview] Querying live database for fee payments...');
+      const data = await feesService.getAllRecords();
+      setRecords(data || []);
+      setFilteredRecords(data || []);
+    } catch (error) {
+      console.error('[Fees Overview] Failed to fetch fees:', error);
+      toast.error('Failed to load live fee records.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchFees = async () => {
-      try {
-        setLoading(true);
-        // In real app: fetch from Supabase
-        // const data = await supabaseHelpers.getAll('fees', { orderBy: 'due_date' });
-        
-        // Mock data
-        setRecords([
-          { id: '1', student_name: 'Rahul Sharma', batch_name: 'Grade 10 Maths', month: 'May', year: '2024', total_amount: 2500, paid_amount: 2500, status: 'paid', due_date: '2024-05-05' },
-          { id: '2', student_name: 'Priya Singh', batch_name: 'Grade 12 Physics', month: 'May', year: '2024', total_amount: 3000, paid_amount: 1500, status: 'partial', due_date: '2024-05-10' },
-          { id: '3', student_name: 'Amit Patel', batch_name: 'Grade 10 Maths', month: 'May', year: '2024', total_amount: 2500, paid_amount: 0, status: 'pending', due_date: '2024-05-05' },
-          { id: '4', student_name: 'Suresh Kumar', batch_name: 'Foundation Science', month: 'May', year: '2024', total_amount: 1500, paid_amount: 1500, status: 'paid', due_date: '2024-05-07' },
-        ]);
-      } catch (error) {
-        console.error('Failed to fetch fees');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchFees();
   }, []);
+
+  // Filter & Search Records
+  useEffect(() => {
+    let result = records;
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(r => 
+        r.student?.full_name?.toLowerCase().includes(query) ||
+        r.batch?.batch_name?.toLowerCase().includes(query) ||
+        r.transaction_id?.toLowerCase().includes(query) ||
+        r.payment_method?.toLowerCase().includes(query)
+      );
+    }
+
+    if (filterMonth !== 'All') {
+      result = result.filter(r => {
+        if (!r.due_date) return false;
+        const date = new Date(r.due_date);
+        const monthYearStr = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        return monthYearStr.includes(filterMonth);
+      });
+    }
+
+    setFilteredRecords(result);
+  }, [searchQuery, filterMonth, records]);
+
+  // Handle record deletion
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this payment record? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      console.log(`[Fees Overview] Deleting fee record ID: ${id}`);
+      await feesService.deleteRecord(id);
+      toast.success('Fee record deleted successfully!');
+      
+      // Optimistic state update
+      setRecords(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      console.error('[Fees Overview] Delete error:', err);
+      toast.error('Failed to delete fee record.');
+    }
+  };
+
+  // Dynamic Metrics Calculations
+  const totalCollected = records.reduce((sum, r) => sum + (Number(r.paid_amount) || 0), 0);
+
+  const outstandingFees = records.reduce((sum, r) => sum + (Math.max(0, Number(r.total_amount) - Number(r.paid_amount)) || 0), 0);
+  
+  // Total projected = All total_amounts expected
+  const totalProjected = records.reduce((sum, r) => sum + (Number(r.total_amount) || 0), 0);
+  
+  // Collection rate = (Total Collected / Total Projected) * 100
+  const collectionRate = totalProjected > 0 
+    ? Math.round((totalCollected / totalProjected) * 100) 
+    : 100;
+
+  // Extract unique month options from records for filter
+  const monthOptions = Array.from(
+    new Set(
+      records
+        .map(r => {
+          if (!r.due_date) return null;
+          const date = new Date(r.due_date);
+          return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        })
+        .filter(Boolean)
+    )
+  );
 
   return (
     <div className="space-y-8">
@@ -59,53 +130,61 @@ export default function FeesOverviewPage() {
 
       {/* Financial Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+        {/* Collected Fees Card */}
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
+           <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500"></div>
            <div className="flex justify-between items-start">
               <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
                  <IndianRupee size={20} />
               </div>
               <span className="flex items-center gap-1 text-xs font-bold text-emerald-600">
-                 <ArrowUpRight size={14} /> 12%
+                 <ArrowUpRight size={14} /> Collected
               </span>
            </div>
            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-4">Collected Fees</p>
-           <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(65400)}</p>
+           <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(totalCollected)}</p>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+        {/* Outstanding Card */}
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
+           <div className="absolute top-0 left-0 right-0 h-1 bg-rose-500"></div>
            <div className="flex justify-between items-start">
               <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
                  <IndianRupee size={20} />
               </div>
               <span className="flex items-center gap-1 text-xs font-bold text-rose-600">
-                 <ArrowDownRight size={14} /> 5%
+                 <ArrowDownRight size={14} /> Outstanding
               </span>
            </div>
-           <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-4">Outstanding</p>
-           <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(12500)}</p>
+           <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-4">Outstanding (Pending)</p>
+           <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(outstandingFees)}</p>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+        {/* Collection Rate Card */}
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
+           <div className="absolute top-0 left-0 right-0 h-1 bg-indigo-500"></div>
            <div className="flex justify-between items-start">
               <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
                  <PieChart size={20} />
               </div>
            </div>
            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-4">Collection Rate</p>
-           <p className="text-2xl font-black text-gray-900 mt-1">84%</p>
+           <p className="text-2xl font-black text-gray-900 mt-1">{collectionRate}%</p>
            <div className="w-full bg-gray-100 h-1.5 rounded-full mt-3 overflow-hidden">
-              <div className="bg-indigo-600 h-full w-[84%]" />
+              <div className="bg-indigo-600 h-full transition-all duration-500" style={{ width: `${collectionRate}%` }} />
            </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+        {/* Projected Card */}
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
+           <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500"></div>
            <div className="flex justify-between items-start">
               <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
                  <Plus size={20} />
               </div>
            </div>
-           <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-4">Projected (May)</p>
-           <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(77900)}</p>
+           <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-4">Total Amount Recorded</p>
+           <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(totalProjected)}</p>
         </div>
       </div>
 
@@ -115,23 +194,29 @@ export default function FeesOverviewPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-600 transition-colors" size={18} />
           <input 
             type="text" 
-            placeholder="Search by student or batch..." 
+            placeholder="Search by student, batch, txn, or payment method..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-sm"
           />
         </div>
         <div className="flex gap-2">
-           <select className="text-sm border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 focus:ring-indigo-500">
-              <option>May 2024</option>
-              <option>April 2024</option>
+           <select 
+             value={filterMonth}
+             onChange={(e) => setFilterMonth(e.target.value)}
+             className="text-sm border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 focus:ring-indigo-500 outline-none text-gray-700 font-semibold"
+           >
+              <option value="All">All Months</option>
+              {monthOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
            </select>
-          <Button variant="secondary" className="gap-2">
-            <Filter size={18} /> Filters
+          <Button variant="secondary" className="gap-2" onClick={() => { setSearchQuery(''); setFilterMonth('All'); }}>
+            Reset Filters
           </Button>
         </div>
       </div>
 
       {/* Fee Table */}
-      <FeeTable records={records} isLoading={loading} />
+      <FeeTable records={filteredRecords} onDelete={handleDelete} isLoading={loading} />
     </div>
   );
 }

@@ -45,11 +45,11 @@ export default function TeacherAttendancePage() {
     try {
       setLoading(true);
       
-      // We assume profile.email matches teachers.email to get the correct teacher_id
+      // Query teachers by user_id
       const { data: teacherData, error: teacherError } = await supabase
         .from('teachers')
         .select('id')
-        .eq('email', profile?.email || '')
+        .eq('user_id', profile.id)
         .maybeSingle();
         
       if (teacherError) throw teacherError;

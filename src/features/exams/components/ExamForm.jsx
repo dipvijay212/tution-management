@@ -52,7 +52,7 @@ const ExamForm = ({ batches = [], subjects = [], onSubmit, isLoading }) => {
             className="mt-1 block w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all text-sm appearance-none"
           >
             <option value="">Select Batch</option>
-            {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {batches.map(b => <option key={b.id} value={b.id}>{b.batch_name}</option>)}
           </select>
         </div>
 

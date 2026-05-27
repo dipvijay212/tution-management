@@ -70,93 +70,116 @@ export const AuthProvider = ({ children }) => {
     }
   }, [router]);
 
-  useEffect(() => {
-    if (!mounted) return;
-    if (isInitialized.current) return;
-    isInitialized.current = true;
+    // Keep a mutable ref of the profile to avoid stale closure issues in the event listener
+    const profileRef = useRef(profile);
+    
+    useEffect(() => {
+      profileRef.current = profile;
+    }, [profile]);
 
-    let isSubscribed = true;
-
-    const initAuth = async () => {
-      try {
-        console.log('[Auth] Initializing session...');
-        dispatch(setLoading(true));
-        
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError) {
-          console.error('[Auth] Session error:', sessionError);
-          throw sessionError;
-        }
-
-        if (!isSubscribed) return;
-
-        if (session?.user) {
-          console.log('[Auth] Valid session found:', session.user.email);
-          const profileData = await fetchProfile(session.user);
+    useEffect(() => {
+      if (!mounted) return;
+      if (isInitialized.current) return;
+      isInitialized.current = true;
+  
+      let isSubscribed = true;
+  
+      const initAuth = async () => {
+        try {
+          console.log('[Auth] Initializing session...');
+          dispatch(setLoading(true));
           
-          if (!isSubscribed) return;
-
-          if (!profileData) {
-            console.warn('[Auth] Authenticated but no profile record. Redirecting to login.');
-            dispatch(clearAuth());
-            router.replace('/login?error=profile_not_found');
-          } else {
-            dispatch(setAuth({ user: session.user, profile: profileData }));
-            handleRedirect(profileData, window.location.pathname);
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+          
+          if (sessionError) {
+            console.error('[Auth] Session error:', sessionError);
+            throw sessionError;
           }
-        } else {
-          console.log('[Auth] No active session found.');
-          dispatch(clearAuth());
-        }
-      } catch (err) {
-        if (!isSubscribed) return;
-        console.error('[Auth] Initialization fatal error:', err);
-        dispatch(setAuthError(err.message));
-        dispatch(clearAuth());
-      } finally {
-        console.log('[Auth] Initialization flow completed.');
-        dispatch(setLoading(false));
-      }
-    };
-
-    initAuth();
-
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[Auth] Event detected:', event);
-      if (!isSubscribed) return;
-      
-      try {
-        // Handle token refresh or sign in or password recovery
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'PASSWORD_RECOVERY') {
+  
+          if (!isSubscribed) return;
+  
           if (session?.user) {
+            console.log('[Auth] Valid session found:', session.user.email);
             const profileData = await fetchProfile(session.user);
-            if (!isSubscribed) return;
             
-            if (profileData) {
+            if (!isSubscribed) return;
+  
+            if (!profileData) {
+              console.warn('[Auth] Authenticated but no profile record. Redirecting to login.');
+              dispatch(clearAuth());
+              router.replace('/login?error=profile_not_found');
+            } else {
               dispatch(setAuth({ user: session.user, profile: profileData }));
               handleRedirect(profileData, window.location.pathname);
-            } else {
-              dispatch(clearAuth());
             }
+          } else {
+            console.log('[Auth] No active session found.');
+            dispatch(clearAuth());
           }
-        } else if (event === 'SIGNED_OUT') {
-          console.log('[Auth] User signed out, clearing state.');
+        } catch (err) {
+          if (!isSubscribed) return;
+          console.error('[Auth] Initialization fatal error:', err);
+          dispatch(setAuthError(err.message));
           dispatch(clearAuth());
-          router.replace('/login');
+        } finally {
+          console.log('[Auth] Initialization flow completed.');
+          dispatch(setLoading(false));
         }
-      } catch (err) {
-        console.error('[Auth] Error in onAuthStateChange handler:', err);
-      }
-    });
-
-    return () => {
-      isSubscribed = false;
-      subscription?.unsubscribe();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted]);
+      };
+  
+      initAuth();
+  
+      // Set up auth state listener
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('[Auth] Event detected:', event);
+        if (!isSubscribed) return;
+        
+        try {
+          if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') {
+            if (session?.user) {
+              // Only fetch from DB if profile is not already in memory to prevent PostgREST deadlocks
+              let profileData = profileRef.current;
+              if (!profileData) {
+                console.log('[Auth] Profile not in state, fetching...');
+                profileData = await fetchProfile(session.user);
+              } else {
+                console.log('[Auth] Profile already in state, skipping DB fetch.');
+              }
+              
+              if (!isSubscribed) return;
+              
+              if (profileData) {
+                dispatch(setAuth({ user: session.user, profile: profileData }));
+                handleRedirect(profileData, window.location.pathname);
+              } else {
+                dispatch(clearAuth());
+              }
+            }
+          } else if (event === 'TOKEN_REFRESHED') {
+            if (session?.user) {
+              // Token refreshed in background. Bypassing database fetch completely to prevent async locks!
+              console.log('[Auth] Token refreshed. Updating credentials in store without redundant database query.');
+              const currentProfile = profileRef.current;
+              if (currentProfile) {
+                dispatch(setAuth({ user: session.user, profile: currentProfile }));
+              }
+            }
+          } else if (event === 'SIGNED_OUT') {
+            console.log('[Auth] User signed out, clearing state.');
+            dispatch(clearAuth());
+            router.replace('/login');
+          }
+        } catch (err) {
+          console.error('[Auth] Error in onAuthStateChange handler:', err);
+        }
+      });
+  
+      return () => {
+        isSubscribed = false;
+        subscription?.unsubscribe();
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [mounted]);
 
   // Initial initialization loading screen (with hydration protection)
   if (!mounted || (loading && !isAuthenticated)) {
