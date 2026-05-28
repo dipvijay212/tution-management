@@ -5,9 +5,10 @@ import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { studentsService } from '@/services/students.service';
 import Button from '@/components/ui/Button';
-import { ArrowLeft, User, Mail, Phone, Calendar, Hash, Home, Shield, Info, Edit, Heart, Award, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { ArrowLeft, User, Mail, Phone, Calendar, Hash, Home, Shield, Info, Edit, Heart, Award, CheckCircle2, XCircle, AlertCircle, IndianRupee } from 'lucide-react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { formatCurrency } from '@/lib/utils';
 
 export default function ViewStudentProfilePage() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function ViewStudentProfilePage() {
   const [loading, setLoading] = useState(true);
   const [student, setStudent] = useState(null);
   const [attendance, setAttendance] = useState([]);
+  const [fees, setFees] = useState([]);
 
   useEffect(() => {
     async function loadStudentAndAttendance() {
@@ -38,6 +40,16 @@ export default function ViewStudentProfilePage() {
 
         if (attError) throw attError;
         setAttendance(attendanceData || []);
+
+        // Fetch student fees history
+        const { data: feesData, error: feesError } = await supabase
+          .from('fees')
+          .select('*')
+          .eq('student_id', id)
+          .order('created_at', { ascending: false });
+
+        if (feesError) throw feesError;
+        setFees(feesData || []);
 
       } catch (err) {
         console.error('[View Student Profile] Failed to load student/attendance:', err);
@@ -63,6 +75,11 @@ export default function ViewStudentProfilePage() {
   const attendanceRate = totalDays > 0 
     ? Math.round(((presentDays + (lateDays * 0.75) + (leaveDays * 0.5)) / totalDays) * 100)
     : 0;
+
+  // Calculate fees statistics
+  const totalFees = fees.reduce((sum, f) => sum + parseFloat(f.amount || 0), 0);
+  const paidFees = fees.filter(f => f.status === 'Paid').reduce((sum, f) => sum + parseFloat(f.amount || 0), 0);
+  const pendingFees = fees.filter(f => f.status === 'Pending' || f.status === 'Partial').reduce((sum, f) => sum + parseFloat(f.amount || 0), 0);
 
   // Format date of birth beautifully
   const formatBirthDate = (dateStr) => {
@@ -280,6 +297,77 @@ export default function ViewStudentProfilePage() {
               </div>
             </div>
 
+          </div>
+
+          {/* Fees Summary & Logs Section */}
+          <div className="bg-white p-8 rounded-3xl premium-shadow border border-slate-100 space-y-6">
+            <h3 className="text-lg font-bold text-slate-900 border-b border-slate-50 pb-3 flex items-center gap-2">
+              <IndianRupee size={18} className="text-emerald-600" /> Fees Invoice & Payments Report
+            </h3>
+
+            {/* Fees Stat Pills */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-slate-50/50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-between shadow-inner">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Allocated Fees</span>
+                <span className="text-lg font-black text-slate-700 mt-1">{formatCurrency(totalFees)}</span>
+              </div>
+              <div className="bg-emerald-50/40 border border-emerald-100/50 p-4 rounded-2xl flex flex-col justify-between">
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Total Paid Fees</span>
+                <span className="text-lg font-black text-emerald-600 mt-1">{formatCurrency(paidFees)}</span>
+              </div>
+              <div className="bg-rose-50/40 border border-rose-100/50 p-4 rounded-2xl flex flex-col justify-between">
+                <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider block">Total Pending / Partial</span>
+                <span className="text-lg font-black text-rose-600 mt-1">{formatCurrency(pendingFees)}</span>
+              </div>
+            </div>
+
+            {/* Fees Logs Table */}
+            <div className="overflow-hidden border border-slate-100 rounded-2xl">
+              <div className="max-h-[300px] overflow-y-auto">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-slate-50/80 border-b border-slate-100 sticky top-0">
+                      <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase">Due Date</th>
+                      <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase">Amount</th>
+                      <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase">Status</th>
+                      <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase">Method / Txn ID</th>
+                      <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase">Payment Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 font-medium">
+                    {fees.length > 0 ? fees.map((invoice) => (
+                      <tr key={invoice.id} className="hover:bg-slate-50/30 transition-colors">
+                        <td className="px-4 py-3 text-slate-700 font-bold">{formatDate(invoice.due_date)}</td>
+                        <td className="px-4 py-3 text-slate-900 font-bold">{formatCurrency(invoice.amount)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 text-xs font-bold rounded-full border ${
+                            invoice.status === 'Paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                            invoice.status === 'Partial' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                            'bg-rose-50 text-rose-700 border-rose-100'
+                          }`}>
+                            {invoice.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">
+                          {invoice.payment_method ? (
+                            <span>{invoice.payment_method} {invoice.transaction_id ? `(${invoice.transaction_id})` : ''}</span>
+                          ) : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">
+                          {invoice.payment_date ? formatDate(invoice.payment_date) : '-'}
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan="5" className="px-4 py-8 text-center text-slate-400">
+                          No fee records generated for this student.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
 
           {/* Parent & Contact Information */}
