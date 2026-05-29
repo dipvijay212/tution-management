@@ -1,109 +1,43 @@
-import { makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
-import pino from 'pino';
-import QRCode from 'qrcode';
-
-// Keep connection alive across Next.js HMR in development
-const globalForWhatsApp = globalThis;
-
 class WhatsAppService {
   constructor() {
-    this.sock = globalForWhatsApp.waSock || null;
-    this.qrCode = null;
-    this.status = 'DISCONNECTED';
-    if (!globalForWhatsApp.waSock) {
-      this.init();
-    } else {
-      this.status = 'CONNECTED';
-    }
-  }
-
-  async init() {
-    try {
-      this.status = 'INITIALIZING';
-      const { state, saveCreds } = await useMultiFileAuthState('./.whatsapp-auth');
-
-      this.sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: false,
-        logger: pino({ level: 'silent' }), // Disable excessive logging
-      });
-
-      globalForWhatsApp.waSock = this.sock;
-
-      this.sock.ev.on('creds.update', saveCreds);
-
-      this.sock.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect, qr } = update;
-
-        if (qr) {
-          this.qrCode = await QRCode.toDataURL(qr);
-          this.status = 'QR_READY';
-        }
-
-        if (connection === 'close') {
-          this.qrCode = null;
-          const shouldReconnect =
-            lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-          console.log('WhatsApp connection closed. Reconnecting:', shouldReconnect);
-          
-          if (shouldReconnect) {
-            this.init();
-          } else {
-            this.status = 'DISCONNECTED';
-            this.sock = null;
-            globalForWhatsApp.waSock = null;
-          }
-        } else if (connection === 'open') {
-          console.log('WhatsApp connection opened');
-          this.status = 'CONNECTED';
-          this.qrCode = null;
-        }
-      });
-    } catch (error) {
-      console.error('Failed to initialize WhatsApp:', error);
-      this.status = 'ERROR';
-    }
+    // In production, NEXT_PUBLIC_WHATSAPP_API_URL should point to your Render/Railway deployed microservice
+    // In local development, it can point to the locally running microservice (http://localhost:3001)
+    this.apiUrl = process.env.NEXT_PUBLIC_WHATSAPP_API_URL || 'http://localhost:3001';
   }
 
   async getStatus() {
-    return {
-      status: this.status,
-      qr: this.qrCode
-    };
+    try {
+      const res = await fetch(`${this.apiUrl}/api/whatsapp/status`, { cache: 'no-store' });
+      if (!res.ok) throw new Error('Microservice is down');
+      return await res.json();
+    } catch (error) {
+      console.error('Failed to get status from microservice:', error);
+      return { status: 'ERROR', qr: null };
+    }
   }
 
   async logout() {
-    if (this.sock) {
-        await this.sock.logout();
-        this.sock = null;
-        globalForWhatsApp.waSock = null;
-        this.status = 'DISCONNECTED';
+    try {
+      await fetch(`${this.apiUrl}/api/whatsapp/logout`, { method: 'POST' });
+    } catch (error) {
+      console.error('Failed to logout:', error);
     }
   }
 
   async sendMessage(to, text) {
-    if (this.status !== 'CONNECTED' || !this.sock) {
-      throw new Error('WhatsApp is not connected.');
-    }
-    
-    // Format number to include country code (assuming India +91 if not provided)
-    let formattedNumber = to.replace(/\D/g, '');
-    if (formattedNumber.length === 10) {
-      formattedNumber = `91${formattedNumber}`;
-    }
-    
-    const jid = `${formattedNumber}@s.whatsapp.net`;
-    
     try {
-      const [result] = await this.sock.onWhatsApp(jid);
-      if (!result?.exists) {
-         throw new Error(`Number ${formattedNumber} is not on WhatsApp.`);
+      const res = await fetch(`${this.apiUrl}/api/whatsapp/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, text })
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
       }
-
-      await this.sock.sendMessage(jid, { text });
-      return { success: true, jid };
+      return await res.json();
     } catch (error) {
-      console.error('Failed to send message:', error);
+      console.error('Failed to send message via microservice:', error);
       throw error;
     }
   }
