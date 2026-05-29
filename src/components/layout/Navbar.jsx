@@ -2,12 +2,20 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import Button from '@/components/ui/Button';
 import { useAuth } from '@/hooks/use-auth';
 import { LogOut, User as UserIcon, Loader2 } from 'lucide-react';
 
 const Navbar = () => {
   const { user, profile, logout, loading, isAuthenticated } = useAuth();
+  const pathname = usePathname();
+
+  const isDashboardRoute = pathname?.startsWith('/admin') || 
+                           pathname?.startsWith('/student') || 
+                           pathname?.startsWith('/teacher');
+
+  if (isDashboardRoute) return null;
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-gray-200 bg-white/80 backdrop-blur-md">

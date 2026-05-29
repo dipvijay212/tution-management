@@ -13,7 +13,17 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const { profile, isAuthenticated, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const [isAuthorized, setIsAuthorized] = useState(false);
+
+  // Synchronously calculate initial authorization to avoid layout flickers
+  const [isAuthorized, setIsAuthorized] = useState(() => {
+    if (loading) return false;
+    if (!isAuthenticated) return false;
+    if (allowedRoles.length > 0) {
+      if (!profile) return false;
+      return allowedRoles.includes(profile.role);
+    }
+    return true;
+  });
 
   useEffect(() => {
     // Only proceed once loading is complete
@@ -21,6 +31,7 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
 
     if (!isAuthenticated) {
       console.log('[ProtectedRoute] Not authenticated, redirecting to login');
+      setIsAuthorized(false);
       router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
       return;
     }
@@ -31,15 +42,16 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
          // If loading is finished but profile is still null, 
          // it means the user exists in Auth but not in our public.users table.
          console.warn('[ProtectedRoute] Profile not found for authenticated user');
+         setIsAuthorized(false);
          router.replace('/login?error=profile_not_found');
          return;
       }
-
 
       const hasRequiredRole = allowedRoles.includes(profile.role);
       
       if (!hasRequiredRole) {
         console.warn(`[ProtectedRoute] Access denied. Required: [${allowedRoles}], Actual: ${profile.role}`);
+        setIsAuthorized(false);
         
         // Determine redirect target based on actual role to avoid loops
         let target = '/login';

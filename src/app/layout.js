@@ -1,6 +1,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { StoreProvider } from "@/providers/StoreProvider";
 import { ToastProvider } from "@/providers/ToastProvider";
@@ -44,13 +45,7 @@ export default function RootLayout({ children }) {
               <main className="flex-1">
                 {children}
               </main>
-              <footer className="border-t border-gray-200 bg-white py-8">
-                <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                  <p className="text-center text-sm text-gray-500">
-                    © {new Date().getFullYear()} TuitionPro. All rights reserved.
-                  </p>
-                </div>
-              </footer>
+              <Footer />
             </AuthProvider>
           </StoreProvider>
         </ErrorBoundary>

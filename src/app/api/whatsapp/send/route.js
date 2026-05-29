@@ -33,12 +33,14 @@ export async function POST(request) {
     }
 
     let status = 'PENDING';
+    let waErrorMsg = null;
     try {
       await whatsappService.sendMessage(parentPhone, messageBody);
       status = 'SENT';
     } catch (waError) {
       console.error('WhatsApp Error:', waError);
       status = 'FAILED';
+      waErrorMsg = waError.message || 'Failed to send message via WhatsApp';
     }
 
     const { data: log, error: logError } = await supabaseAdmin
@@ -60,7 +62,7 @@ export async function POST(request) {
     }
 
     if (status === 'FAILED') {
-      return NextResponse.json({ error: 'Failed to send message via WhatsApp' }, { status: 500 });
+      return NextResponse.json({ error: waErrorMsg }, { status: 400 });
     }
 
     return NextResponse.json({ success: true, log });

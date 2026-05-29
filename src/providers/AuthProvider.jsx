@@ -181,8 +181,8 @@ export const AuthProvider = ({ children }) => {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [mounted]);
 
-  // Initial initialization loading screen (with hydration protection)
-  if (!mounted || (loading && !isAuthenticated)) {
+  // Initial initialization loading screen
+  if (loading && !isAuthenticated) {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-slate-50 gap-4">
         <div className="relative">
