@@ -16,7 +16,8 @@ import {
   ChevronRight,
   LogOut,
   LayoutGrid,
-  UserCheck
+  UserCheck,
+  MessageSquare
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
@@ -37,6 +38,7 @@ const Sidebar = ({ role }) => {
       { name: 'Fees', icon: IndianRupee, path: '/admin/fees' },
       { name: 'Exams', icon: BookOpen, path: '/admin/exams' },
       { name: 'Assignments', icon: Calendar, path: '/admin/assignments' },
+      { name: 'Communication', icon: MessageSquare, path: '/admin/communication' },
     ],
     teacher: [
       { name: 'Dashboard', icon: LayoutDashboard, path: '/teacher' },
@@ -44,6 +46,7 @@ const Sidebar = ({ role }) => {
       { name: 'Students', icon: GraduationCap, path: '/teacher/students' },
       { name: 'Attendance', icon: ClipboardCheck, path: '/teacher/attendance' },
       { name: 'Assignments', icon: Calendar, path: '/teacher/assignments' },
+      { name: 'Communication', icon: MessageSquare, path: '/teacher/communication' },
     ],
     student: [
       { name: 'Dashboard', icon: LayoutDashboard, path: '/student' },
@@ -51,6 +54,7 @@ const Sidebar = ({ role }) => {
       { name: 'Attendance', icon: ClipboardCheck, path: '/student/attendance' },
       { name: 'Assignments', icon: Calendar, path: '/student/assignments' },
       { name: 'Billing', icon: IndianRupee, path: '/student/billing' },
+      { name: 'Communication', icon: MessageSquare, path: '/student/communication' },
     ]
   };
 
