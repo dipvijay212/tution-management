@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { studentsService } from '@/services/students.service';
 import Button from '@/components/ui/Button';
-import { ArrowLeft, User, Mail, Phone, Calendar, Hash, Home, Shield, Info, Edit, Heart, Award, CheckCircle2, XCircle, AlertCircle, IndianRupee } from 'lucide-react';
+import { ArrowLeft, User, Mail, Phone, Calendar, Hash, Home, Shield, Info, Edit, Heart, Award, CheckCircle2, XCircle, AlertCircle, IndianRupee, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '@/lib/utils';
@@ -18,6 +18,7 @@ export default function ViewStudentProfilePage() {
   const [student, setStudent] = useState(null);
   const [attendance, setAttendance] = useState([]);
   const [fees, setFees] = useState([]);
+  const [batches, setBatches] = useState([]);
 
   useEffect(() => {
     async function loadStudentAndAttendance() {
@@ -31,25 +32,28 @@ export default function ViewStudentProfilePage() {
         }
         setStudent(studentData);
 
-        // Fetch student attendance logs, joining batches to get the batch name
-        const { data: attendanceData, error: attError } = await supabase
-          .from('attendance')
-          .select('*, batches(batch_name)')
-          .eq('student_id', id)
-          .order('attendance_date', { ascending: false });
+        // Fetch batches, attendance, and fees in parallel
+        const [studentBatches, attendanceRes, feesRes] = await Promise.all([
+          studentsService.getStudentBatches(id),
+          supabase
+            .from('attendance')
+            .select('*, batches(batch_name)')
+            .eq('student_id', id)
+            .order('attendance_date', { ascending: false }),
+          supabase
+            .from('fees')
+            .select('*')
+            .eq('student_id', id)
+            .order('created_at', { ascending: false })
+        ]);
 
-        if (attError) throw attError;
-        setAttendance(attendanceData || []);
+        setBatches(studentBatches || []);
 
-        // Fetch student fees history
-        const { data: feesData, error: feesError } = await supabase
-          .from('fees')
-          .select('*')
-          .eq('student_id', id)
-          .order('created_at', { ascending: false });
+        if (attendanceRes.error) throw attendanceRes.error;
+        setAttendance(attendanceRes.data || []);
 
-        if (feesError) throw feesError;
-        setFees(feesData || []);
+        if (feesRes.error) throw feesRes.error;
+        setFees(feesRes.data || []);
 
       } catch (err) {
         console.error('[View Student Profile] Failed to load student/attendance:', err);
@@ -229,6 +233,46 @@ export default function ViewStudentProfilePage() {
               </div>
 
             </div>
+          </div>
+
+          {/* Enrolled Batches Section */}
+          <div className="bg-white p-8 rounded-3xl premium-shadow border border-slate-100 space-y-6">
+            <h3 className="text-lg font-bold text-slate-900 border-b border-slate-50 pb-3 flex items-center gap-2">
+              <BookOpen size={18} className="text-indigo-600" /> Enrolled Batches
+            </h3>
+
+            {batches.length === 0 ? (
+              <p className="text-sm text-slate-400 font-medium py-2">
+                This student is not enrolled in any batches yet.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {batches.map((b) => (
+                  <Link 
+                    key={b.batch_id} 
+                    href={`/admin/batches/${b.batch_id}`}
+                    className="p-4 rounded-2xl bg-slate-50 hover:bg-indigo-50/30 border border-slate-100 hover:border-indigo-100 transition-all flex flex-col justify-between group"
+                  >
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">
+                        {b.batches?.batch_name}
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1.5 font-semibold">
+                        Subject: {b.batches?.subject?.name || 'N/A'}
+                      </p>
+                      {b.batches?.teacher?.full_name && (
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Teacher: {b.batches.teacher.full_name}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right mt-3 text-[11px] font-bold text-indigo-500 flex justify-end items-center gap-1">
+                      <span>{b.batches?.start_time?.slice(0, 5)} - {b.batches?.end_time?.slice(0, 5)}</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Attendance Report & Logs Section */}

@@ -7,14 +7,17 @@ export const metadata = {
 
 export default function TeacherCommunicationPage() {
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-2">My Communications</h1>
-        <p className="text-slate-400 text-sm">
+    <div className="h-[calc(100vh-6rem)] sm:h-[calc(100vh-7rem)] lg:h-[calc(100vh-8rem)] flex flex-col overflow-hidden">
+      <div className="mb-4 shrink-0">
+        <h1 className="text-2xl font-black text-slate-900 mb-1">My Communications</h1>
+        <p className="text-slate-500 text-sm">
           Chat with parents and manage class groups.
         </p>
       </div>
-      <ChatInterface />
+      <div className="flex-1 min-h-0">
+        <ChatInterface />
+      </div>
     </div>
   );
 }
+

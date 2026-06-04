@@ -1,14 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
+import { batchesService } from '@/services/batches.service';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
-import { ArrowLeft, User, Mail, Lock, Phone, Calendar, School, ShieldAlert, Home, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, User, Mail, Lock, Phone, Calendar, School, ShieldAlert, Home, Eye, EyeOff, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 
@@ -32,6 +33,25 @@ export default function CreateStudentPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [batches, setBatches] = useState([]);
+  const [selectedBatches, setSelectedBatches] = useState([]);
+  const [batchesLoading, setBatchesLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadBatches() {
+      try {
+        setBatchesLoading(true);
+        const data = await batchesService.getAll();
+        setBatches(data || []);
+      } catch (err) {
+        console.error('Failed to load batches:', err);
+        toast.error('Failed to load available batches.');
+      } finally {
+        setBatchesLoading(false);
+      }
+    }
+    loadBatches();
+  }, []);
 
   const {
     register,
@@ -80,6 +100,7 @@ export default function CreateStudentPage() {
       const payload = {
         ...data,
         date_of_birth: data.date_of_birth || null,
+        batch_ids: selectedBatches,
       };
       console.log('[Create Student Frontend] Payload formatted:', payload);
 
@@ -288,6 +309,65 @@ export default function CreateStudentPage() {
                 placeholder="e.g. 123 Maple Street, Suite 4B, Springfield"
                 disabled={loading}
               />
+            </div>
+
+            {/* Batch Enrollment Selection */}
+            <div className="w-full md:col-span-2 space-y-3 pt-4 border-t border-slate-100/80">
+              <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <BookOpen size={18} className="text-indigo-600" />
+                Assign Batches
+              </label>
+              {batchesLoading ? (
+                <div className="flex items-center gap-2 text-sm text-slate-500 py-2">
+                  <span className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-indigo-600"></span>
+                  Loading batches...
+                </div>
+              ) : batches.length === 0 ? (
+                <p className="text-xs text-amber-600 bg-amber-50 p-3 rounded-xl border border-amber-100 font-medium">
+                  No batches available. Please create a batch first in the Batches section.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/50 p-5 rounded-2xl border border-slate-100 max-h-64 overflow-y-auto">
+                  {batches.map((batch) => {
+                    const isSelected = selectedBatches.includes(batch.id);
+                    return (
+                      <div 
+                        key={batch.id} 
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedBatches(selectedBatches.filter(id => id !== batch.id));
+                          } else {
+                            setSelectedBatches([...selectedBatches, batch.id]);
+                          }
+                        }}
+                        className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
+                          isSelected 
+                            ? 'bg-indigo-50/50 border-indigo-200 ring-2 ring-indigo-500/10' 
+                            : 'bg-white border-slate-100 hover:border-indigo-100 hover:bg-slate-50/50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {}} // handled by click of outer container
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-slate-900 leading-tight">{batch.batch_name}</p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            {batch.subject?.name || 'No Subject'} • {batch.start_time?.slice(0, 5) || 'TBD'} - {batch.end_time?.slice(0, 5) || 'TBD'}
+                          </p>
+                          {batch.teacher?.full_name && (
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              Teacher: {batch.teacher.full_name}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
           </div>

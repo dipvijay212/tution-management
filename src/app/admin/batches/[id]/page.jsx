@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { batchesService } from '@/services/batches.service';
+import { supabase } from '@/lib/supabase/client';
 import Button from '@/components/ui/Button';
 import { 
   ArrowLeft, Edit, Trash2, Calendar, Clock, 
@@ -17,24 +18,39 @@ export default function BatchManagePage() {
   const router = useRouter();
   const [batch, setBatch] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [students, setStudents] = useState([]);
+  const [studentsLoading, setStudentsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchBatch = async () => {
+    const fetchBatchAndStudents = async () => {
       try {
         setLoading(true);
-        const data = await batchesService.getById(id);
-        setBatch(data);
+        setStudentsLoading(true);
+        
+        const [batchData, enrollmentRes] = await Promise.all([
+          batchesService.getById(id),
+          supabase
+            .from('student_batches')
+            .select('student:students(*)')
+            .eq('batch_id', id)
+        ]);
+
+        setBatch(batchData);
+        
+        if (enrollmentRes.error) throw enrollmentRes.error;
+        setStudents(enrollmentRes.data?.filter(e => e.student).map(e => e.student) || []);
       } catch (error) {
-        console.error('Failed to fetch batch:', error);
+        console.error('Failed to fetch batch details and students:', error);
         toast.error('Failed to load batch details');
         router.push('/admin/batches');
       } finally {
         setLoading(false);
+        setStudentsLoading(false);
       }
     };
     
     if (id) {
-      fetchBatch();
+      fetchBatchAndStudents();
     }
   }, [id, router]);
 
@@ -152,23 +168,72 @@ export default function BatchManagePage() {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-900">Enrolled Students</h2>
               <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm font-semibold">
-                {batch.student_count || 0} Students
+                {students.length} Students
               </span>
             </div>
             
-            {/* Placeholder for Students List */}
-            <div className="text-center py-12 border-2 border-dashed border-gray-100 rounded-2xl">
-              <div className="h-16 w-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Users size={32} className="text-gray-400" />
+            {studentsLoading ? (
+              <div className="flex items-center justify-center py-12 gap-2 text-slate-500 text-sm font-medium">
+                <span className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-indigo-600"></span>
+                Loading enrolled students...
               </div>
-              <h3 className="text-lg font-semibold text-gray-900">No students enrolled yet</h3>
-              <p className="text-gray-500 max-w-sm mx-auto mt-2">
-                Students assigned to this batch will appear here. You can manage their enrollments from the Students section.
-              </p>
-              <Button className="mt-6" variant="secondary" onClick={() => router.push('/admin/students')}>
-                Manage Students
-              </Button>
-            </div>
+            ) : students.length === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed border-gray-100 rounded-2xl">
+                <div className="h-16 w-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Users size={32} className="text-gray-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">No students enrolled yet</h3>
+                <p className="text-gray-500 max-w-sm mx-auto mt-2 text-sm">
+                  Students assigned to this batch will appear here. You can manage their enrollments from the Students section.
+                </p>
+                <Button className="mt-6" variant="secondary" onClick={() => router.push('/admin/students')}>
+                  Manage Students
+                </Button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-slate-50/50 border-b border-slate-100">
+                      <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Student</th>
+                      <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Class / Grade</th>
+                      <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Parent Phone</th>
+                      <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {students.map((student) => (
+                      <tr key={student.id} className="hover:bg-slate-50/30 transition-colors group">
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm uppercase">
+                              {student.full_name?.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-900 leading-tight group-hover:text-indigo-600 transition-colors">{student.full_name}</p>
+                              <p className="text-[11px] text-slate-500 mt-0.5">{student.student_code || 'No Code'}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap text-slate-600 font-medium">
+                          {student.class_name || 'N/A'}
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap text-slate-600 font-medium">
+                          {student.parent_phone || student.phone || 'N/A'}
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap text-right font-semibold">
+                          <Link href={`/admin/students/${student.id}`}>
+                            <button className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50/50 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-all">
+                              View Profile
+                            </button>
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 
@@ -177,7 +242,7 @@ export default function BatchManagePage() {
           <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-3xl p-6 text-white shadow-lg shadow-indigo-200">
             <h3 className="font-semibold text-indigo-100 mb-4">Capacity Status</h3>
             <div className="flex items-end gap-2 mb-2">
-              <span className="text-4xl font-bold">{batch.student_count || 0}</span>
+              <span className="text-4xl font-bold">{students.length}</span>
               <span className="text-indigo-200 mb-1">/ {batch.capacity}</span>
             </div>
             
@@ -185,11 +250,11 @@ export default function BatchManagePage() {
             <div className="w-full bg-indigo-900/40 rounded-full h-2 mt-4 mb-2">
               <div 
                 className="bg-white h-2 rounded-full transition-all duration-500" 
-                style={{ width: `${Math.min(((batch.student_count || 0) / batch.capacity) * 100, 100)}%` }}
+                style={{ width: `${Math.min(((students.length) / batch.capacity) * 100, 100)}%` }}
               ></div>
             </div>
             <p className="text-sm text-indigo-200 text-right">
-              {batch.capacity - (batch.student_count || 0)} seats remaining
+              {batch.capacity - students.length} seats remaining
             </p>
           </div>
 

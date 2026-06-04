@@ -56,8 +56,8 @@ export const useChat = (roomId = null) => {
         if (userIds.length > 0) {
           const { data: usersData } = await supabase
             .from('users')
-            .select('id, full_name, role')
-            .in('id', userIds);
+            .select('id:auth_id, full_name, role')
+            .in('auth_id', userIds);
             
           messagesWithSenders = messagesWithSenders.map(m => ({
             ...m,
@@ -174,8 +174,8 @@ export const useChat = (roomId = null) => {
           // Fetch sender details to attach to payload since realtime doesn't auto-join
           const { data: senderData } = await supabase
             .from('users')
-            .select('id, full_name, role')
-            .eq('id', payload.new.sender_id)
+            .select('id:auth_id, full_name, role')
+            .eq('auth_id', payload.new.sender_id)
             .single();
             
           const completeMessage = {
@@ -233,18 +233,49 @@ export const useChat = (roomId = null) => {
         console.error('Error creating test room:', err);
       }
     },
-    createChatRoom: async (type, title, participantIds = []) => {
+    createChatRoom: async (type, title, participantIds = [], classId = null) => {
       try {
+        let finalParticipantIds = [...participantIds];
+        
+        if (classId) {
+          // Fetch student user IDs (references users.id) enrolled in this batch
+          const { data: enrolledStudents } = await supabase
+            .from('student_batches')
+            .select('student:students(user_id)')
+            .eq('batch_id', classId);
+            
+          if (enrolledStudents && enrolledStudents.length > 0) {
+            const studentUserIds = enrolledStudents
+              .filter(es => es.student && es.student.user_id)
+              .map(es => es.student.user_id);
+              
+            if (studentUserIds.length > 0) {
+              const { data: usersData } = await supabase
+                .from('users')
+                .select('auth_id')
+                .in('id', studentUserIds);
+                
+              if (usersData) {
+                usersData.forEach(u => {
+                  if (u.auth_id && !finalParticipantIds.includes(u.auth_id)) {
+                    finalParticipantIds.push(u.auth_id);
+                  }
+                });
+              }
+            }
+          }
+        }
+
         const { data: room, error: roomError } = await supabase
           .from('chat_rooms')
-          .insert({ type, title, created_by: user.id })
+          .insert({ type, title, created_by: user.id, class_id: classId })
           .select()
           .single();
           
         if (roomError) throw roomError;
 
         // Ensure current user is in participantIds
-        const participants = new Set(participantIds);
+        const participants = new Set(finalParticipantIds);
         participants.add(user.id);
         
         const participantRows = Array.from(participants).map(id => ({
@@ -264,9 +295,129 @@ export const useChat = (roomId = null) => {
       }
     },
     fetchUsers: async () => {
-      // Helper to fetch users for the modal dropdown
-      const { data } = await supabase.from('users').select('id, full_name, role').neq('id', user?.id);
-      return data || [];
+      if (!user) return [];
+      try {
+        if (profile?.role?.toLowerCase() === 'teacher') {
+          // 1. Fetch teacher record
+          const { data: teacherData, error: teacherError } = await supabase
+            .from('teachers')
+            .select('id')
+            .eq('user_id', profile.id)
+            .maybeSingle();
+
+          if (teacherError || !teacherData) {
+            console.error('Error fetching teacher profile:', teacherError);
+            return [];
+          }
+
+          // 2. Fetch batches taught by this teacher
+          const { data: batches, error: batchesError } = await supabase
+            .from('batches')
+            .select('id')
+            .eq('teacher_id', teacherData.id);
+
+          if (batchesError || !batches || batches.length === 0) {
+            return [];
+          }
+
+          const batchIds = batches.map(b => b.id);
+
+          // 3. Fetch user_ids of students enrolled in these batches
+          const { data: studentBatches, error: sbError } = await supabase
+            .from('student_batches')
+            .select('student:students(user_id)')
+            .in('batch_id', batchIds);
+
+          if (sbError || !studentBatches) {
+            console.error('Error fetching student batches:', sbError);
+            return [];
+          }
+
+          const studentUserIds = studentBatches
+            .filter(sb => sb.student && sb.student.user_id)
+            .map(sb => sb.student.user_id);
+
+          if (studentUserIds.length === 0) {
+            return [];
+          }
+
+          // 4. Fetch the users details for these student IDs
+          const { data: users, error: usersError } = await supabase
+            .from('users')
+            .select('id:auth_id, full_name, role')
+            .in('id', studentUserIds)
+            .neq('auth_id', user.id);
+
+          if (usersError) throw usersError;
+          return users || [];
+        } else {
+          // Admins or other roles fetch all users except themselves
+          const { data, error: usersError } = await supabase
+            .from('users')
+            .select('id:auth_id, full_name, role')
+            .neq('auth_id', user.id);
+            
+          if (usersError) throw usersError;
+          return data || [];
+        }
+      } catch (err) {
+        console.error('[useChat] Error fetching users for chat:', err);
+        return [];
+      }
+    },
+    fetchBatchesForChat: async () => {
+      if (!user) return [];
+      try {
+        const normalizedRole = profile?.role?.toLowerCase();
+        if (normalizedRole === 'teacher') {
+          const { data: teacherData } = await supabase
+            .from('teachers')
+            .select('id')
+            .eq('user_id', profile.id)
+            .maybeSingle();
+
+          if (!teacherData) return [];
+
+          const { data } = await supabase
+            .from('batches')
+            .select('id, batch_name')
+            .eq('teacher_id', teacherData.id);
+          return data || [];
+        } else if (normalizedRole === 'admin') {
+          const { data } = await supabase
+            .from('batches')
+            .select('id, batch_name');
+          return data || [];
+        }
+        return [];
+      } catch (err) {
+        console.error('Error fetching batches for chat:', err);
+        return [];
+      }
+    },
+    fetchBatchStudentAuthIds: async (batchId) => {
+      try {
+        const { data: enrolled } = await supabase
+          .from('student_batches')
+          .select('student:students(user_id)')
+          .eq('batch_id', batchId);
+        if (!enrolled || enrolled.length === 0) return [];
+        
+        const studentUserIds = enrolled
+          .filter(es => es.student && es.student.user_id)
+          .map(es => es.student.user_id);
+          
+        if (studentUserIds.length === 0) return [];
+        
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('auth_id')
+          .in('id', studentUserIds);
+        return usersData?.map(u => u.auth_id).filter(Boolean) || [];
+      } catch (e) {
+        console.error('Error fetching student auth_ids:', e);
+        return [];
+      }
     }
   };
 };

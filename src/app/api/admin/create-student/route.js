@@ -77,9 +77,10 @@ export async function POST(request) {
       parent_name,
       parent_phone,
       address,
+      batch_ids,
     } = body;
 
-    console.log('[Create Student API] Parameters parsed:', { full_name, email, phone, gender, date_of_birth, class_name, school_name, parent_name });
+    console.log('[Create Student API] Parameters parsed:', { full_name, email, phone, gender, date_of_birth, class_name, school_name, parent_name, batch_ids });
 
     if (!full_name || !email || !password) {
       console.warn('[Create Student API] Missing required parameters.');
@@ -138,7 +139,7 @@ export async function POST(request) {
 
       // 5. Insert student-specific metadata into students
       console.log('[Create Student API] Inserting student metadata into students table...');
-      const { error: studentError } = await supabaseAdmin
+      const { data: studentRecord, error: studentError } = await supabaseAdmin
         .from('students')
         .insert({
           user_id: publicUserId,
@@ -153,19 +154,67 @@ export async function POST(request) {
           parent_name: parent_name || null,
           parent_phone: parent_phone || null,
           address: address || null,
-        });
+        })
+        .select()
+        .single();
 
       if (studentError) {
         console.error('[Create Student API] studentError inserting metadata:', studentError);
         throw studentError;
       }
 
-      console.log('[Create Student API] Student record created successfully.');
+      console.log('[Create Student API] Student record created successfully. student.id:', studentRecord.id);
+
+      // 6. Insert batch enrollments if batch_ids are provided
+      if (batch_ids && Array.isArray(batch_ids) && batch_ids.length > 0) {
+        console.log('[Create Student API] Inserting batch enrollments for student:', studentRecord.id);
+        const enrollments = batch_ids.map(batchId => ({
+          student_id: studentRecord.id,
+          batch_id: batchId,
+        }));
+
+        const { error: enrollmentError } = await supabaseAdmin
+          .from('student_batches')
+          .insert(enrollments);
+
+        if (enrollmentError) {
+          console.error('[Create Student API] enrollmentError inserting student batches:', enrollmentError);
+          throw enrollmentError;
+        }
+        console.log('[Create Student API] Batch enrollments inserted successfully.');
+
+        // Enroll student in existing batch chats
+        console.log('[Create Student API] Enrolling student in existing batch chat rooms...');
+        const { data: roomsToInsertTo } = await supabaseAdmin
+          .from('chat_rooms')
+          .select('id')
+          .in('class_id', batch_ids);
+
+        if (roomsToInsertTo && roomsToInsertTo.length > 0) {
+          const participantRows = roomsToInsertTo.map(r => ({
+            room_id: r.id,
+            user_id: authId,
+            role: 'member'
+          }));
+
+          const { error: partError } = await supabaseAdmin
+            .from('chat_participants')
+            .insert(participantRows);
+
+          if (partError) {
+            console.error('[Create Student API] Error enrolling student in batch chats:', partError);
+          } else {
+            console.log('[Create Student API] Enrolled student in chat rooms:', roomsToInsertTo.map(r => r.id));
+          }
+        }
+      }
+
       return NextResponse.json({
         success: true,
         message: 'Student account created successfully',
         student: {
-          id: publicUserId,
+          id: studentRecord.id,
+          user_id: publicUserId,
           student_code: studentCode,
           full_name,
           email,
