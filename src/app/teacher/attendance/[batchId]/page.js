@@ -9,7 +9,7 @@ import Button from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 
-export default function BatchAttendancePage() {
+export default function TeacherBatchAttendancePage() {
   const { batchId } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -90,7 +90,7 @@ export default function BatchAttendancePage() {
     try {
       setSaving(true);
       
-      // 1. Delete all existing attendance records for this batch and date
+      // 1. Delete all existing student attendance records for this batch and date
       const { error: delError } = await supabase
         .from('attendance')
         .delete()
@@ -118,7 +118,7 @@ export default function BatchAttendancePage() {
       }
       
       toast.success('Attendance saved successfully');
-      router.push('/admin/attendance');
+      router.push('/teacher/attendance');
     } catch (error) {
       console.error('Failed to save attendance:', error);
       toast.error('Failed to save attendance');
@@ -131,7 +131,7 @@ export default function BatchAttendancePage() {
     <div className="max-w-5xl mx-auto space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
-          <Link href="/admin/attendance" className="p-2 bg-white border border-gray-100 rounded-xl text-gray-500 hover:text-indigo-600 hover:border-indigo-100 transition-all">
+          <Link href="/teacher/attendance" className="p-2 bg-white border border-gray-100 rounded-xl text-gray-500 hover:text-indigo-600 hover:border-indigo-100 transition-all">
             <ArrowLeft size={20} />
           </Link>
           <div>
@@ -170,7 +170,7 @@ export default function BatchAttendancePage() {
          </div>
          <div>
             <p className="text-sm font-bold text-amber-900 underline decoration-amber-300">Realtime Sync Active</p>
-            <p className="text-xs text-amber-700 mt-0.5">Other administrators can see your changes in real-time as you mark them.</p>
+            <p className="text-xs text-amber-700 mt-0.5">Other teachers and administrators can see your changes in real-time as you mark them.</p>
          </div>
       </div>
     </div>

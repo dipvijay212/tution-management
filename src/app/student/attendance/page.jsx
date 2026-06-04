@@ -74,10 +74,11 @@ export default function StudentAttendancePage() {
       if (data && data.length > 0) {
         let p = 0, a = 0, l = 0, le = 0;
         data.forEach(rec => {
-          if (rec.status === 'Present') p++;
-          else if (rec.status === 'Absent') a++;
-          else if (rec.status === 'Late') l++;
-          else if (rec.status === 'Leave') le++;
+          const statusLower = rec.status?.toLowerCase();
+          if (statusLower === 'present') p++;
+          else if (statusLower === 'absent') a++;
+          else if (statusLower === 'late') l++;
+          else if (statusLower === 'leave') le++;
         });
         const total = data.length;
         const rate = Math.round(((p + l * 0.5 + le) / total) * 100);
@@ -92,14 +93,14 @@ export default function StudentAttendancePage() {
   };
 
   const getStatusBadge = (status) => {
-    switch (status) {
-      case 'Present':
+    switch (status?.toLowerCase()) {
+      case 'present':
         return <Badge variant="emerald">Present</Badge>;
-      case 'Absent':
+      case 'absent':
         return <Badge variant="rose">Absent</Badge>;
-      case 'Late':
+      case 'late':
         return <Badge variant="amber">Late</Badge>;
-      case 'Leave':
+      case 'leave':
         return <Badge variant="violet">Leave</Badge>;
       default:
         return <Badge variant="gray">{status}</Badge>;
@@ -107,14 +108,14 @@ export default function StudentAttendancePage() {
   };
 
   const getStatusIcon = (status) => {
-    switch (status) {
-      case 'Present':
+    switch (status?.toLowerCase()) {
+      case 'present':
         return <CheckCircle className="h-5 w-5 text-emerald-500" />;
-      case 'Absent':
+      case 'absent':
         return <XCircle className="h-5 w-5 text-rose-500" />;
-      case 'Late':
+      case 'late':
         return <AlertTriangle className="h-5 w-5 text-amber-500" />;
-      case 'Leave':
+      case 'leave':
         return <Info className="h-5 w-5 text-indigo-500" />;
       default:
         return null;

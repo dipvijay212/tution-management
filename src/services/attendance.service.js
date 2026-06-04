@@ -6,15 +6,30 @@ export const attendanceService = {
       .from('attendance')
       .select('*')
       .eq('batch_id', batchId)
-      .eq('date', date);
+      .eq('attendance_date', date);
     if (error) throw error;
     return data;
   },
 
   async markAttendance(attendanceRecords) {
+    if (!attendanceRecords || attendanceRecords.length === 0) return [];
+    
+    const batchId = attendanceRecords[0].batch_id;
+    const date = attendanceRecords[0].attendance_date;
+
+    // Delete existing records for this batch and date
+    const { error: delError } = await supabase
+      .from('attendance')
+      .delete()
+      .eq('batch_id', batchId)
+      .eq('attendance_date', date);
+    
+    if (delError) throw delError;
+
+    // Insert new records
     const { data, error } = await supabase
       .from('attendance')
-      .upsert(attendanceRecords, { onConflict: 'student_id,batch_id,date' })
+      .insert(attendanceRecords)
       .select();
     if (error) throw error;
     return data;

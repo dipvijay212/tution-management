@@ -71,10 +71,10 @@ export default function ViewStudentProfilePage() {
 
   // Calculate statistics
   const totalDays = attendance.length;
-  const presentDays = attendance.filter(a => a.status === 'Present').length;
-  const lateDays = attendance.filter(a => a.status === 'Late').length;
-  const leaveDays = attendance.filter(a => a.status === 'Leave').length;
-  const absentDays = attendance.filter(a => a.status === 'Absent').length;
+  const presentDays = attendance.filter(a => a.status?.toLowerCase() === 'present').length;
+  const lateDays = attendance.filter(a => a.status?.toLowerCase() === 'late').length;
+  const leaveDays = attendance.filter(a => a.status?.toLowerCase() === 'leave').length;
+  const absentDays = attendance.filter(a => a.status?.toLowerCase() === 'absent').length;
 
   const attendanceRate = totalDays > 0 
     ? Math.round(((presentDays + (lateDays * 0.75) + (leaveDays * 0.5)) / totalDays) * 100)
@@ -104,10 +104,10 @@ export default function ViewStudentProfilePage() {
   };
 
   const getStatusColor = (status) => {
-    switch (status) {
-      case 'Present': return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-      case 'Late': return 'bg-amber-50 text-amber-700 border-amber-100';
-      case 'Leave': return 'bg-blue-50 text-blue-700 border-blue-100';
+    switch (status?.toLowerCase()) {
+      case 'present': return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+      case 'late': return 'bg-amber-50 text-amber-700 border-amber-100';
+      case 'leave': return 'bg-blue-50 text-blue-700 border-blue-100';
       default: return 'bg-rose-50 text-rose-700 border-rose-100';
     }
   };
